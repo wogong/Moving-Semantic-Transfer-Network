@@ -32,11 +32,11 @@ def decay(start_rate,epoch,num_epochs):
         return start_rate/pow(1+0.001*epoch,0.75)
 
 def adaptation_factor(x):
-	if x>=1.0:
-		return 1.0
-	den=1.0+math.exp(-10*x)
-	lamb=2.0/den-1.0
-	return lamb
+        if x>=1.0:
+                return 1.0
+        den=1.0+math.exp(-10*x)
+        lamb=2.0/den-1.0
+        return lamb
 def main(_):
     # Create training directories
     now = datetime.datetime.now()
@@ -89,7 +89,7 @@ def main(_):
     target_correct=tf.reduce_sum(tf.cast(target_correct_pred,tf.float32))
     target_accuracy = tf.reduce_mean(tf.cast(target_correct_pred, tf.float32))
     train_op = model.optimize(decay_learning_rate, train_layers,adlamb,sc,tc)
-	
+
     D_op=model.adoptimize(decay_learning_rate,train_layers)
     optimizer=tf.group(train_op,D_op)
     
@@ -124,8 +124,8 @@ def main(_):
 
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
-	saver=tf.train.Saver()
-	train_writer.add_graph(sess.graph)
+        saver=tf.train.Saver()
+        train_writer.add_graph(sess.graph)
         # Load the pretrained weights
         #model.load_original_weights(sess, skip_layers=train_layers)
 
@@ -135,15 +135,15 @@ def main(_):
         print("{} Start training...".format(datetime.datetime.now()))
         print("{} Open Tensorboard at --logdir {}".format(datetime.datetime.now(), tensorboard_dir))
         gs=0
-	gd=0
-	for epoch in range(FLAGS.num_epochs):
+        gd=0
+        for epoch in range(FLAGS.num_epochs):
             #print("{} Epoch number: {}".format(datetime.datetime.now(), epoch+1))
             step = 1
             # Start training
             while step < train_batches_per_epoch:
-		gd+=1
-	    	lamb=adaptation_factor(gd*1.0/MAX_STEP)
-	    	rate=decay(FLAGS.learning_rate,gd,MAX_STEP)
+                gd+=1
+                    lamb=adaptation_factor(gd*1.0/MAX_STEP)
+                    rate=decay(FLAGS.learning_rate,gd,MAX_STEP)
                 if gd%1==0:
                     print("{} Start validation".format(datetime.datetime.now()))
                     test_acc = 0.
@@ -156,13 +156,12 @@ def main(_):
                         test_count += 1
                     print test_acc,test_count
                     test_acc /= test_count
-	            print("{} Validation Accuracy = {:.4f}".format(datetime.datetime.now(), test_acc))
+                    print("{} Validation Accuracy = {:.4f}".format(datetime.datetime.now(), test_acc))
                     # Reset the dataset pointers
                     val_preprocessor.reset_pointer()
-		
-                    
-		    return
-		 	
+
+                    return
 
 if __name__ == '__main__':
     tf.app.run()
+
