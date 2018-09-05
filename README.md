@@ -1,7 +1,5 @@
 # Moving Semantic Transfer Network (ICML2018)
 
-
-
 <div align="center">
 <img src="introduction/mstn_network.PNG" width="400"  />
 <img src="introduction/target.png" width="450"  />
@@ -9,9 +7,10 @@
 
 Based on adversarial adaptation, we propose a `Pseudo Centroid Alignment Objective` to enforce `Semantic Transfer`. If you are limited to use a relative-small batch size (64 for 31-classification or 100 for 1000-classification), you might be interested in our `Moving Centroid Alignment`. 
 
-###  Welcome to check our [paper](http://proceedings.mlr.press/v80/xie18c/xie18c.pdf).
+###  Welcome to check our [paper](http://proceedings.mlr.press/v80/xie18c/xie18c.pdf)
 
 ## Citation
+
 If you find this useful for your research, we would be appreciated if you cite the following papers:
 
 ```
@@ -40,15 +39,12 @@ My work is based on DANN. During my reimplementation of DANN, I noticed followin
 <li>Using tensorboard to check whether centroids have been updated.</li>
 </ol>
 
-
-
-
 ## Contact
+
 If you have any problem about this library, please create an Issue or send us an Email at:
 - shaoanxie@outlook.com
 
-
-
 ## Acknowledgement for the code
+
 For digits dataset, the code is modified from [Here](https://github.com/erictzeng/mldata). 
 For real-world dataset, the code is based on [Here](https://github.com/dgurkaynak/tensorflow-cnn-finetune).

@@ -202,8 +202,7 @@ class AlexNetModel(object):
                 logits=y_predict, labels=batch_y))
         tf.summary.scalar('Closs', self.loss)
         return self.loss
-
-    def optimize(self, learning_rate, train_layers, global_step,
+ def optimize(self, learning_rate, train_layers, global_step,
                  source_centroid, target_centroid):
         print '+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++'
         print train_layers
