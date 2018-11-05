@@ -4,13 +4,24 @@ Derived from: https://github.com/kratzert/finetune_alexnet_with_tensorflow/
 import tensorflow as tf
 import numpy as np
 import math
+import pdb
 
 
 def protoloss(sc, tc):
     return tf.reduce_mean(tf.square(sc - tc))
 
 
+def get_distance_matrix(centroid):
+    r = tf.reduce_sum(centroid * centroid, 1)
+
+    # turn r into column vector
+    r = tf.reshape(r, [-1, 1])
+    D = r - 2 * tf.matmul(centroid, tf.transpose(centroid)) + tf.transpose(r)
+    return tf.divide(D - tf.reduce_min(D), tf.reduce_max(D) - tf.reduce_min(D))
+
+
 class AlexNetModel(object):
+
     def __init__(self, num_classes=1000, dropout_keep_prob=0.5):
         self.num_classes = num_classes
         self.dropout_keep_prob = dropout_keep_prob
@@ -26,10 +37,8 @@ class AlexNetModel(object):
             initializer=tf.zeros_initializer(),
             trainable=False)
 
-        tf.summary.histogram('source_moving_centroid',
-                             self.source_moving_centroid)
-        tf.summary.histogram('target_moving_centroid',
-                             self.target_moving_centroid)
+        tf.summary.histogram('source_moving_centroid', self.source_moving_centroid)
+        tf.summary.histogram('target_moving_centroid', self.target_moving_centroid)
 
     def inference(self, x, training=False):
         # 1st Layer: Conv (w ReLu) -> Pool -> Lrn
@@ -66,9 +75,8 @@ class AlexNetModel(object):
         self.fc7 = fc7
         # 8th Layer: FC and return unscaled activations (for tf.nn.softmax_cross_entropy_with_logits)
         fc8 = fc(fc7, 4096, 256, relu=False, name='fc8')
-        self.fc8 = fc8
-        self.score = fc(
-            fc8, 256, self.num_classes, relu=False, stddev=0.005, name='fc9')
+        self.fc8 = fc8  # bottleneck layer
+        self.score = fc(fc8, 256, self.num_classes, relu=False, stddev=0.005, name='fc9')
         self.output = tf.nn.softmax(self.score)
         self.feature = self.fc8
         return self.score
@@ -77,12 +85,12 @@ class AlexNetModel(object):
         var_list = [v for v in tf.trainable_variables() if 'D' in v.name]
         D_weights = [v for v in var_list if 'weights' in v.name]
         D_biases = [v for v in var_list if 'biases' in v.name]
-        print '=================Discriminator_weights====================='
-        print D_weights
-        print '=================Discriminator_biases====================='
-        print D_biases
-        self.Dregloss = 0.0005 * tf.reduce_mean(
-            [tf.nn.l2_loss(v) for v in var_list if 'weights' in v.name])
+        print('=================Discriminator_weights=====================')
+        print(D_weights)
+        print('=================Discriminator_biases=====================')
+        print(D_biases)
+        # D_reg_loss weights L2 regularization, why 0.0005?
+        self.Dregloss = 0.0005 * tf.reduce_mean([tf.nn.l2_loss(v) for v in var_list if 'weights' in v.name])
         D_op1 = tf.train.MomentumOptimizer(learning_rate, 0.9).minimize(
             self.D_loss + self.Dregloss, var_list=D_weights)
         D_op2 = tf.train.MomentumOptimizer(learning_rate * 2.0, 0.9).minimize(
@@ -90,6 +98,7 @@ class AlexNetModel(object):
         D_op = tf.group(D_op1, D_op2)
         return D_op
 
+    # never used
     def wganloss(self, x, xt, batch_size, lam=10.0):
         with tf.variable_scope('reuse_inference') as scope:
             scope.reuse_variables()
@@ -99,7 +108,7 @@ class AlexNetModel(object):
             source_fc8 = self.fc8
             source_softmax = self.output
             source_output = outer(source_fc7, source_softmax)
-            print 'SOURCE_OUTPUT: ', source_output.get_shape()
+            print('SOURCE_OUTPUT: ', source_output.get_shape())
             scope.reuse_variables()
             self.inference(xt, training=True)
             target_fc6 = self.fc6
@@ -107,7 +116,7 @@ class AlexNetModel(object):
             target_fc8 = self.fc8
             target_softmax = self.output
             target_output = outer(target_fc7, target_softmax)
-            print 'TARGET_OUTPUT: ', target_output.get_shape()
+            print('TARGET_OUTPUT: ', target_output.get_shape())
         with tf.variable_scope('reuse') as scope:
             target_logits, _ = D(target_fc8)
             scope.reuse_variables()
@@ -117,10 +126,8 @@ class AlexNetModel(object):
             grad = tf.gradients(D(X_inter), [X_inter])[0]
             grad_norm = tf.sqrt(tf.reduce_sum((grad)**2, axis=1))
             grad_pen = lam * tf.reduce_mean((grad_norm - 1)**2)
-            D_loss = tf.reduce_mean(target_logits) - tf.reduce_mean(
-                source_logits) + grad_pen
-            G_loss = tf.reduce_mean(source_logits) - tf.reduce_mean(
-                target_logits)
+            D_loss = tf.reduce_mean(target_logits) - tf.reduce_mean(source_logits) + grad_pen
+            G_loss = tf.reduce_mean(source_logits) - tf.reduce_mean(target_logits)
             self.G_loss = G_loss
             self.D_loss = D_loss
             self.D_loss = 0.3 * self.D_loss
@@ -141,128 +148,100 @@ class AlexNetModel(object):
             scope.reuse_variables()
             target_logits, _ = D(target_feature)
 
-        self.source_feature = source_feature
+        self.source_feature = source_feature  #(batch_size, 256)
         self.target_feature = target_feature
         self.concat_feature = tf.concat([source_feature, target_feature], 0)
-        source_result = tf.argmax(y, 1)
+        source_result = tf.argmax(y, 1)  #(batch_size, ) num=0,...,30
         target_result = tf.argmax(target_pred, 1)
-        ones = tf.ones_like(source_feature)
-        current_source_count = tf.unsorted_segment_sum(ones, source_result,
-                                                       self.num_classes)
-        current_target_count = tf.unsorted_segment_sum(ones, target_result,
-                                                       self.num_classes)
+        ones = tf.ones_like(source_feature)  #(batch_size, 256)
+        current_source_count = tf.unsorted_segment_sum(ones, source_result, self.num_classes)  #(31, 256)
+        current_target_count = tf.unsorted_segment_sum(ones, target_result, self.num_classes)
 
-        current_positive_source_count = tf.maximum(
-            current_source_count, tf.ones_like(current_source_count))
-        current_positive_target_count = tf.maximum(
-            current_target_count, tf.ones_like(current_target_count))
+        current_positive_source_count = tf.maximum(current_source_count,
+                                                   tf.ones_like(current_source_count))  #(31, 256)
+        # substitude 0 with 1
+        current_positive_target_count = tf.maximum(current_target_count, tf.ones_like(current_target_count))
 
         current_source_centroid = tf.divide(
-            tf.unsorted_segment_sum(
-                data=source_feature,
-                segment_ids=source_result,
-                num_segments=self.num_classes), current_positive_source_count)
+            tf.unsorted_segment_sum(data=source_feature, segment_ids=source_result, num_segments=self.num_classes),
+            current_positive_source_count)  #(31, 256)
         current_target_centroid = tf.divide(
-            tf.unsorted_segment_sum(
-                data=target_feature,
-                segment_ids=target_result,
-                num_segments=self.num_classes), current_positive_target_count)
+            tf.unsorted_segment_sum(data=target_feature, segment_ids=target_result, num_segments=self.num_classes),
+            current_positive_target_count)
 
         decay = tf.constant(0.3)
         self.decay = decay
 
-        target_centroid = (decay) * current_target_centroid + (
-            1. - decay) * self.target_moving_centroid
-        source_centroid = (decay) * current_source_centroid + (
-            1. - decay) * self.source_moving_centroid
+        target_centroid = (decay) * current_target_centroid + (1. - decay) * self.target_moving_centroid
+        source_centroid = (decay) * current_source_centroid + (1. - decay) * self.source_moving_centroid
 
-        self.Semanticloss = protoloss(source_centroid, target_centroid)
+        self.distance_loss = protoloss(get_distance_matrix(source_centroid), get_distance_matrix(target_centroid))
+        self.Semanticloss = protoloss(source_centroid, target_centroid) + 0.5 * self.distance_loss
+
         tf.summary.scalar('semanticloss', self.Semanticloss)
+        tf.summary.scalar('distanceloss', self.distance_loss)
 
         D_real_loss = tf.reduce_mean(
-            tf.nn.sigmoid_cross_entropy_with_logits(
-                logits=target_logits, labels=tf.ones_like(target_logits)))
+            tf.nn.sigmoid_cross_entropy_with_logits(logits=target_logits, labels=tf.ones_like(target_logits)))
         D_fake_loss = tf.reduce_mean(
-            tf.nn.sigmoid_cross_entropy_with_logits(
-                logits=source_logits, labels=tf.zeros_like(source_logits)))
+            tf.nn.sigmoid_cross_entropy_with_logits(logits=source_logits, labels=tf.zeros_like(source_logits)))
         self.D_loss = D_real_loss + D_fake_loss
         self.G_loss = -self.D_loss
         tf.summary.scalar('G_loss', self.G_loss)
-        tf.summary.scalar('JSD', self.G_loss / 2 + math.log(2))
+        tf.summary.scalar('JSD', self.G_loss / 2 + math.log(2))  #Jenson-Shannon Divergence
 
         self.G_loss = 0.1 * self.G_loss
         self.D_loss = 0.1 * self.D_loss
         return self.G_loss, self.D_loss, source_centroid, target_centroid
 
-    def loss(self, batch_x, batch_y=None):
+    def get_loss(self, batch_x, batch_y=None):
         with tf.variable_scope('reuse_inference') as scope:
             y_predict = self.inference(batch_x, training=True)
-        self.loss = tf.reduce_mean(
-            tf.nn.softmax_cross_entropy_with_logits(
-                logits=y_predict, labels=batch_y))
+        self.loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=y_predict, labels=batch_y))
         tf.summary.scalar('Closs', self.loss)
         return self.loss
- def optimize(self, learning_rate, train_layers, global_step,
-                 source_centroid, target_centroid):
-        print '+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++'
-        print train_layers
-        var_list = [
-            v for v in tf.trainable_variables()
-            if v.name.split('/')[1] in train_layers + ['fc9']
-        ]
+
+    def optimize(self, learning_rate, train_layers, global_step, source_centroid, target_centroid):
+        print('+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++')
+        print(train_layers)
+        var_list = [v for v in tf.trainable_variables() if v.name.split('/')[1] in train_layers + ['fc9']]
         finetune_list = [
-            v for v in var_list if v.name.split('/')[1] in
-            ['conv1', 'conv2', 'conv3', 'conv4', 'conv5', 'fc6', 'fc7']
+            v for v in var_list if v.name.split('/')[1] in ['conv1', 'conv2', 'conv3', 'conv4', 'conv5', 'fc6', 'fc7']
         ]
-        new_list = [
-            v for v in var_list if v.name.split('/')[1] in ['fc8', 'fc9']
-        ]
-        self.Gregloss = 0.0005 * tf.reduce_mean(
-            [tf.nn.l2_loss(x) for x in var_list if 'weights' in x.name])
+        new_list = [v for v in var_list if v.name.split('/')[1] in ['fc8', 'fc9']]
+        # G_reg_loss weights L2 regularization, why 0.0005?
+        self.Gregloss = 0.0005 * tf.reduce_mean([tf.nn.l2_loss(x) for x in var_list if 'weights' in x.name])
 
         finetune_weights = [v for v in finetune_list if 'weights' in v.name]
         finetune_biases = [v for v in finetune_list if 'biases' in v.name]
         new_weights = [v for v in new_list if 'weights' in v.name]
         new_biases = [v for v in new_list if 'biases' in v.name]
 
-        print '==============finetune_weights======================='
-        print finetune_weights
-        print '==============finetune_biases======================='
-        print finetune_biases
-        print '==============new_weights======================='
-        print new_weights
-        print '==============new_biases======================='
-        print new_biases
+        print('==============finetune_weights=======================')
+        print(finetune_weights)
+        print('==============finetune_biases=======================')
+        print(finetune_biases)
+        print('==============new_weights=======================')
+        print(new_weights)
+        print('==============new_biases=======================')
+        print(new_biases)
 
         self.F_loss = self.loss + self.Gregloss + global_step * self.G_loss + global_step * self.Semanticloss
-        train_op1 = tf.train.MomentumOptimizer(learning_rate * 0.1,
-                                               0.9).minimize(
-                                                   self.F_loss,
-                                                   var_list=finetune_weights)
-        train_op2 = tf.train.MomentumOptimizer(learning_rate * 0.2,
-                                               0.9).minimize(
-                                                   self.F_loss,
-                                                   var_list=finetune_biases)
-        train_op3 = tf.train.MomentumOptimizer(learning_rate * 1.0,
-                                               0.9).minimize(
-                                                   self.F_loss,
-                                                   var_list=new_weights)
-        train_op4 = tf.train.MomentumOptimizer(learning_rate * 2.0,
-                                               0.9).minimize(
-                                                   self.F_loss,
-                                                   var_list=new_biases)
+        train_op1 = tf.train.MomentumOptimizer(learning_rate * 0.1, 0.9).minimize(
+            self.F_loss, var_list=finetune_weights)
+        train_op2 = tf.train.MomentumOptimizer(learning_rate * 0.2, 0.9).minimize(
+            self.F_loss, var_list=finetune_biases)
+        train_op3 = tf.train.MomentumOptimizer(learning_rate * 1.0, 0.9).minimize(self.F_loss, var_list=new_weights)
+        train_op4 = tf.train.MomentumOptimizer(learning_rate * 2.0, 0.9).minimize(self.F_loss, var_list=new_biases)
         train_op = tf.group(train_op1, train_op2, train_op3, train_op4)
-        with tf.control_dependencies(
-            [train_op1, train_op2, train_op3, train_op4]):
+        with tf.control_dependencies([train_op1, train_op2, train_op3, train_op4]):
             update_sc = self.source_moving_centroid.assign(source_centroid)
             update_tc = self.target_moving_centroid.assign(target_centroid)
 
         return tf.group(update_sc, update_tc)
 
     def load_original_weights(self, session, skip_layers=[]):
-        weights_dict = np.load(
-            '/home/wogong/Models/tensorflow/bvlc_alexnet.npy',
-            encoding='bytes').item()
+        weights_dict = np.load('/home/wogong/Models/tensorflow/bvlc_alexnet.npy', encoding='bytes').item()
 
         for op_name in weights_dict:
             # if op_name in skip_layers:
@@ -272,15 +251,15 @@ class AlexNetModel(object):
                 continue
 
             with tf.variable_scope('reuse_inference/' + op_name, reuse=True):
-                print '=============================OP_NAME  ========================================'
+                print('=============================OP_NAME  ========================================')
                 for data in weights_dict[op_name]:
                     if len(data.shape) == 1:
                         var = tf.get_variable('biases')
-                        print op_name, var
+                        print(op_name, var)
                         session.run(var.assign(data))
                     else:
                         var = tf.get_variable('weights')
-                        print op_name, var
+                        print(op_name, var)
                         session.run(var.assign(data))
 
 
@@ -289,41 +268,23 @@ Helper methods
 """
 
 
-def conv(x,
-         filter_height,
-         filter_width,
-         num_filters,
-         stride_y,
-         stride_x,
-         name,
-         padding='SAME',
-         groups=1):
+def conv(x, filter_height, filter_width, num_filters, stride_y, stride_x, name, padding='SAME', groups=1):
     input_channels = int(x.get_shape()[-1])
     convolve = lambda i, k: tf.nn.conv2d(i, k, strides=[1, stride_y, stride_x, 1], padding=padding)
 
     with tf.variable_scope(name) as scope:
-        weights = tf.get_variable(
-            'weights',
-            shape=[
-                filter_height, filter_width, input_channels / groups,
-                num_filters
-            ])
+        weights = tf.get_variable('weights', shape=[filter_height, filter_width, input_channels / groups, num_filters])
         biases = tf.get_variable('biases', shape=[num_filters])
 
         if groups == 1:
             conv = convolve(x, weights)
         else:
             input_groups = tf.split(axis=3, num_or_size_splits=groups, value=x)
-            weight_groups = tf.split(
-                axis=3, num_or_size_splits=groups, value=weights)
-            output_groups = [
-                convolve(i, k) for i, k in zip(input_groups, weight_groups)
-            ]
+            weight_groups = tf.split(axis=3, num_or_size_splits=groups, value=weights)
+            output_groups = [convolve(i, k) for i, k in zip(input_groups, weight_groups)]
             conv = tf.concat(axis=3, values=output_groups)
 
-        bias = tf.reshape(
-            tf.nn.bias_add(conv, biases),
-            [-1] + conv.get_shape().as_list()[1:])
+        bias = tf.reshape(tf.nn.bias_add(conv, biases), [-1] + conv.get_shape().as_list()[1:])
         relu = tf.nn.relu(bias, name=scope.name)
         return relu
 
@@ -332,37 +293,26 @@ def D(x):
     with tf.variable_scope('D'):
         num_units_in = int(x.get_shape()[-1])
         num_units_out = 1
-        weights = tf.get_variable(
-            'weights',
-            initializer=tf.truncated_normal([num_units_in, 1024], stddev=0.01))
-        biases = tf.get_variable(
-            'biases', shape=[1024], initializer=tf.zeros_initializer())
+        weights = tf.get_variable('weights', initializer=tf.truncated_normal([num_units_in, 1024], stddev=0.01))
+        biases = tf.get_variable('biases', shape=[1024], initializer=tf.zeros_initializer())
         hx = (tf.matmul(x, weights) + biases)
-    ax = tf.nn.dropout(tf.nn.relu(hx), 0.5)
+        ax = tf.nn.dropout(tf.nn.relu(hx), 0.5)
 
-    weights2 = tf.get_variable(
-        'weights2', initializer=tf.truncated_normal([1024, 1024], stddev=0.01))
-    biases2 = tf.get_variable(
-        'biases2', shape=[1024], initializer=tf.zeros_initializer())
-    hx2 = (tf.matmul(ax, weights2) + biases2)
-    ax2 = tf.nn.dropout(tf.nn.relu(hx2), 0.5)
+        weights2 = tf.get_variable('weights2', initializer=tf.truncated_normal([1024, 1024], stddev=0.01))
+        biases2 = tf.get_variable('biases2', shape=[1024], initializer=tf.zeros_initializer())
+        hx2 = (tf.matmul(ax, weights2) + biases2)
+        ax2 = tf.nn.dropout(tf.nn.relu(hx2), 0.5)
 
-    weights3 = tf.get_variable(
-        'weights3',
-        initializer=tf.truncated_normal([1024, num_units_out], stddev=0.3))
-    biases3 = tf.get_variable(
-        'biases3', shape=[num_units_out], initializer=tf.zeros_initializer())
-    hx3 = tf.matmul(ax2, weights3) + biases3
-    return hx3, tf.nn.sigmoid(hx3)
+        weights3 = tf.get_variable('weights3', initializer=tf.truncated_normal([1024, num_units_out], stddev=0.3))
+        biases3 = tf.get_variable('biases3', shape=[num_units_out], initializer=tf.zeros_initializer())
+        hx3 = tf.matmul(ax2, weights3) + biases3
+        return hx3, tf.nn.sigmoid(hx3)
 
 
 def fc(x, num_in, num_out, name, relu=True, stddev=0.01):
     with tf.variable_scope(name) as scope:
-        weights = tf.get_variable(
-            'weights',
-            initializer=tf.truncated_normal([num_in, num_out], stddev=stddev))
-        biases = tf.get_variable(
-            'biases', initializer=tf.constant(0.1, shape=[num_out]))
+        weights = tf.get_variable('weights', initializer=tf.truncated_normal([num_in, num_out], stddev=stddev))
+        biases = tf.get_variable('biases', initializer=tf.constant(0.1, shape=[num_out]))
         act = tf.nn.xw_plus_b(x, weights, biases, name=scope.name)
 
         if relu == True:
@@ -383,24 +333,13 @@ def outer(a, b):
     return tf.contrib.layers.flatten(c)
 
 
-def max_pool(x,
-             filter_height,
-             filter_width,
-             stride_y,
-             stride_x,
-             name,
-             padding='SAME'):
+def max_pool(x, filter_height, filter_width, stride_y, stride_x, name, padding='SAME'):
     return tf.nn.max_pool(
-        x,
-        ksize=[1, filter_height, filter_width, 1],
-        strides=[1, stride_y, stride_x, 1],
-        padding=padding,
-        name=name)
+        x, ksize=[1, filter_height, filter_width, 1], strides=[1, stride_y, stride_x, 1], padding=padding, name=name)
 
 
 def lrn(x, radius, alpha, beta, name, bias=1.0):
-    return tf.nn.local_response_normalization(
-        x, depth_radius=radius, alpha=alpha, beta=beta, bias=bias, name=name)
+    return tf.nn.local_response_normalization(x, depth_radius=radius, alpha=alpha, beta=beta, bias=bias, name=name)
 
 
 def dropout(x, keep_prob):
