@@ -1,4 +1,3 @@
-
 # Moving-Semantic-Transfer-Network
 
 ## [Click here for the trained MSTN model](https://drive.google.com/drive/folders/1o10GWduF3QI7p55x14YwyYxykjEPi8Jz?usp=sharing).
@@ -34,3 +33,9 @@ Restore the model and evaluate it.
 python restore_mstn.py
 
 ```
+
+## note
+
+这里的代码添加了 distance matrix loss (DML)，原文中是对 S 和 T 中的同类别进行匹配，
+DML 是在获得每个领域类别中心点后，每个领域计算距离矩阵，再对两个领域的距离矩阵进行匹配，
+但是实验效果一般，基本没有提升。分析原因也大致能解释，DML 本质上还是同原文中的方法。
