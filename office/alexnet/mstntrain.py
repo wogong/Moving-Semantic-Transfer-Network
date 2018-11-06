@@ -9,23 +9,17 @@ sys.path.insert(0, '../utils')
 from preprocessor import BatchPreprocessor
 import math
 
-tf.app.flags.DEFINE_float('learning_rate', 0.01,
-                          'Learning rate for adam optimizer')
+tf.app.flags.DEFINE_float('learning_rate', 0.01, 'Learning rate for adam optimizer')
 tf.app.flags.DEFINE_float('dropout_keep_prob', 0.5, 'Dropout keep probability')
-tf.app.flags.DEFINE_integer('num_epochs', 10000000,
-                            'Number of epochs for training')
+tf.app.flags.DEFINE_integer('num_epochs', 10000000, 'Number of epochs for training')
 tf.app.flags.DEFINE_integer('batch_size', 100, 'Batch size')
-tf.app.flags.DEFINE_string('train_layers',
-                           'fc8,fc7,fc6,conv5,conv4,conv3,conv2,conv1',
+tf.app.flags.DEFINE_string('train_layers', 'fc8,fc7,fc6,conv5,conv4,conv3,conv2,conv1',
                            'Finetuning layers, seperated by commas')
 tf.app.flags.DEFINE_string(
     'multi_scale', '256,257',
-    'As preprocessing; scale the image randomly between 2 numbers and crop randomly at network input size'
-)
-tf.app.flags.DEFINE_string('train_root_dir', '/home/wogong/Models/tf-mstn/',
-                           'Root directory to put the training data')
-tf.app.flags.DEFINE_integer('log_step', 10000,
-                            'Logging period in terms of iteration')
+    'As preprocessing; scale the image randomly between 2 numbers and crop randomly at network input size')
+tf.app.flags.DEFINE_string('train_root_dir', '/home/wogong/Models/tf-mstn/', 'Root directory to put the training data')
+tf.app.flags.DEFINE_integer('log_step', 10000, 'Logging period in terms of iteration')
 
 NUM_CLASSES = 31
 TRAINING_FILE = '/home/wogong/Datasets/office/amazon_list.txt'
@@ -36,7 +30,7 @@ MODEL_NAME = 'amazon_to_webcam'
 
 
 def decay(start_rate, epoch, num_epochs):
-    return start_rate / pow(1 + 0.001 * epoch, 0.75)
+    return start_rate / pow(1 + 0.001 * epoch / num_epochs, 0.75)
 
 
 def adaptation_factor(x):
@@ -89,8 +83,7 @@ def main(_):
 
     # Model
     train_layers = FLAGS.train_layers.split(',')
-    model = AlexNetModel(
-        num_classes=NUM_CLASSES, dropout_keep_prob=dropout_keep_prob)
+    model = AlexNetModel(num_classes=NUM_CLASSES, dropout_keep_prob=dropout_keep_prob)
     loss = model.loss(x, y)
 
     # Training accuracy of the model
@@ -101,14 +94,12 @@ def main(_):
     target_correct_pred = tf.equal(tf.argmax(model.score, 1), tf.argmax(yt, 1))
     target_correct = tf.reduce_sum(tf.cast(target_correct_pred, tf.float32))
     target_accuracy = tf.reduce_mean(tf.cast(target_correct_pred, tf.float32))
-    train_op = model.optimize(decay_learning_rate, train_layers, adlamb, sc,
-                              tc)
+    train_op = model.optimize(decay_learning_rate, train_layers, adlamb, sc, tc)
 
     D_op = model.adoptimize(decay_learning_rate, train_layers)
     optimizer = tf.group(train_op, D_op)
 
-    train_writer = tf.summary.FileWriter(
-        '/home/wogong/Models/tf-mstn/log/tensorboard' + MODEL_NAME)
+    train_writer = tf.summary.FileWriter('/home/wogong/Models/tf-mstn/log/tensorboard' + MODEL_NAME)
     train_writer.add_graph(tf.get_default_graph())
     tf.summary.scalar('Testing Accuracy', target_accuracy)
     merged = tf.summary.merge_all()
@@ -150,12 +141,9 @@ def main(_):
         istraining=False)
 
     # Get the number of training/validation steps per epoch
-    train_batches_per_epoch = np.floor(
-        len(train_preprocessor.labels) / FLAGS.batch_size).astype(np.int16)
-    Ttrain_batches_per_epoch = np.floor(
-        len(Ttrain_preprocessor.labels) / FLAGS.batch_size).astype(np.int16)
-    val_batches_per_epoch = np.floor(
-        len(val_preprocessor.labels) / FLAGS.batch_size).astype(np.int16)
+    train_batches_per_epoch = np.floor(len(train_preprocessor.labels) / FLAGS.batch_size).astype(np.int16)
+    Ttrain_batches_per_epoch = np.floor(len(Ttrain_preprocessor.labels) / FLAGS.batch_size).astype(np.int16)
+    val_batches_per_epoch = np.floor(len(val_preprocessor.labels) / FLAGS.batch_size).astype(np.int16)
 
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
@@ -169,8 +157,7 @@ def main(_):
         # saver.restore(sess, "/Users/dgurkaynak/Projects/marvel-training/alexnet64-fc6/model_epoch10.ckpt")
 
         print("{} Start training...".format(datetime.datetime.now()))
-        print("{} Open Tensorboard at --logdir {}".format(
-            datetime.datetime.now(), tensorboard_dir))
+        print("{} Open Tensorboard at --logdir {}".format(datetime.datetime.now(), tensorboard_dir))
         gs = 0
         gd = 0
 
@@ -189,10 +176,8 @@ def main(_):
                         Ttrain_preprocessor.reset_pointer()
                     if gs % train_batches_per_epoch == 0:
                         train_preprocessor.reset_pointer()
-                    batch_xs, batch_ys = train_preprocessor.next_batch(
-                        FLAGS.batch_size)
-                    Tbatch_xs, Tbatch_ys = Ttrain_preprocessor.next_batch(
-                        FLAGS.batch_size)
+                    batch_xs, batch_ys = train_preprocessor.next_batch(FLAGS.batch_size)
+                    Tbatch_xs, Tbatch_ys = Ttrain_preprocessor.next_batch(FLAGS.batch_size)
                     summary, _ = sess.run(
                         [merged, optimizer],
                         feed_dict={
@@ -207,8 +192,7 @@ def main(_):
                     train_writer.add_summary(summary, gd)
                     closs, gloss, dloss, gregloss, dregloss, floss, smloss = sess.run(
                         [
-                            model.loss, model.G_loss, model.D_loss,
-                            model.Gregloss, model.Dregloss, model.F_loss,
+                            model.loss, model.G_loss, model.D_loss, model.Gregloss, model.Dregloss, model.F_loss,
                             model.Semanticloss
                         ],
                         feed_dict={
@@ -223,45 +207,32 @@ def main(_):
                 step += 1
 
                 if gd % 50 == 0:
-                    print '=================== Step {0:<10} ================='.format(
-                        gs)
+                    print '=================== Step {0:<10} ================='.format(gs)
                     print 'Epoch {0:<5} Step {1:<5} Closs {2:<10} Gloss {3:<10} Dloss {4:<10} Total_Loss {7:<10} Gregloss {5:<10} Dregloss {6:<10} Semloss {7:<10}'.format(
-                        epoch, step, closs, gloss, dloss, gregloss, dregloss,
-                        floss, smloss)
+                        epoch, step, closs, gloss, dloss, gregloss, dregloss, floss, smloss)
                     print 'lambda: ', lamb
                     print 'rate: ', rate
                     # Epoch completed, start validation
-                    print("{} Start validation".format(
-                        datetime.datetime.now()))
+                    print("{} Start validation".format(datetime.datetime.now()))
                     test_acc = 0.
                     test_count = 0
 
                     for _ in range((len(val_preprocessor.labels))):
                         batch_tx, batch_ty = val_preprocessor.next_batch(1)
-                        acc = sess.run(
-                            correct,
-                            feed_dict={
-                                x: batch_tx,
-                                y: batch_ty,
-                                dropout_keep_prob: 1.
-                            })
+                        acc = sess.run(correct, feed_dict={x: batch_tx, y: batch_ty, dropout_keep_prob: 1.})
                         test_acc += acc
                         test_count += 1
                     print test_acc, test_count
                     test_acc /= test_count
-                    print("{} Validation Accuracy = {:.4f}".format(
-                        datetime.datetime.now(), test_acc))
+                    print("{} Validation Accuracy = {:.4f}".format(datetime.datetime.now(), test_acc))
 
                     # Reset the dataset pointers
                     val_preprocessor.reset_pointer()
                     #train_preprocessor.reset_pointer()
 
                 if gd % 5000 == 0 and gd > 0:
-                    saver.save(
-                        sess, '/home/wogong/Models/tf-mstn/log/mstnmodel_' +
-                        MODEL_NAME + str(gd) + '.ckpt')
-                    print("{} Saving checkpoint of model...".format(
-                        datetime.datetime.now()))
+                    saver.save(sess, '/home/wogong/Models/tf-mstn/log/mstnmodel_' + MODEL_NAME + str(gd) + '.ckpt')
+                    print("{} Saving checkpoint of model...".format(datetime.datetime.now()))
 
 
 if __name__ == '__main__':

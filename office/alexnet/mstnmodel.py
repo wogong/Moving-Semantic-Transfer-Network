@@ -202,62 +202,62 @@ class AlexNetModel(object):
                 logits=y_predict, labels=batch_y))
         tf.summary.scalar('Closs', self.loss)
         return self.loss
- def optimize(self, learning_rate, train_layers, global_step,
-                 source_centroid, target_centroid):
-        print '+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++'
-        print train_layers
-        var_list = [
-            v for v in tf.trainable_variables()
-            if v.name.split('/')[1] in train_layers + ['fc9']
-        ]
-        finetune_list = [
-            v for v in var_list if v.name.split('/')[1] in
-            ['conv1', 'conv2', 'conv3', 'conv4', 'conv5', 'fc6', 'fc7']
-        ]
-        new_list = [
-            v for v in var_list if v.name.split('/')[1] in ['fc8', 'fc9']
-        ]
-        self.Gregloss = 0.0005 * tf.reduce_mean(
-            [tf.nn.l2_loss(x) for x in var_list if 'weights' in x.name])
 
-        finetune_weights = [v for v in finetune_list if 'weights' in v.name]
-        finetune_biases = [v for v in finetune_list if 'biases' in v.name]
-        new_weights = [v for v in new_list if 'weights' in v.name]
-        new_biases = [v for v in new_list if 'biases' in v.name]
+    def optimize(self, learning_rate, train_layers, global_step,source_centroid, target_centroid):
+            print '+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++'
+            print train_layers
+            var_list = [
+                v for v in tf.trainable_variables()
+                if v.name.split('/')[1] in train_layers + ['fc9']
+            ]
+            finetune_list = [
+                v for v in var_list if v.name.split('/')[1] in
+                ['conv1', 'conv2', 'conv3', 'conv4', 'conv5', 'fc6', 'fc7']
+            ]
+            new_list = [
+                v for v in var_list if v.name.split('/')[1] in ['fc8', 'fc9']
+            ]
+            self.Gregloss = 0.0005 * tf.reduce_mean(
+                [tf.nn.l2_loss(x) for x in var_list if 'weights' in x.name])
 
-        print '==============finetune_weights======================='
-        print finetune_weights
-        print '==============finetune_biases======================='
-        print finetune_biases
-        print '==============new_weights======================='
-        print new_weights
-        print '==============new_biases======================='
-        print new_biases
+            finetune_weights = [v for v in finetune_list if 'weights' in v.name]
+            finetune_biases = [v for v in finetune_list if 'biases' in v.name]
+            new_weights = [v for v in new_list if 'weights' in v.name]
+            new_biases = [v for v in new_list if 'biases' in v.name]
 
-        self.F_loss = self.loss + self.Gregloss + global_step * self.G_loss + global_step * self.Semanticloss
-        train_op1 = tf.train.MomentumOptimizer(learning_rate * 0.1,
-                                               0.9).minimize(
-                                                   self.F_loss,
-                                                   var_list=finetune_weights)
-        train_op2 = tf.train.MomentumOptimizer(learning_rate * 0.2,
-                                               0.9).minimize(
-                                                   self.F_loss,
-                                                   var_list=finetune_biases)
-        train_op3 = tf.train.MomentumOptimizer(learning_rate * 1.0,
-                                               0.9).minimize(
-                                                   self.F_loss,
-                                                   var_list=new_weights)
-        train_op4 = tf.train.MomentumOptimizer(learning_rate * 2.0,
-                                               0.9).minimize(
-                                                   self.F_loss,
-                                                   var_list=new_biases)
-        train_op = tf.group(train_op1, train_op2, train_op3, train_op4)
-        with tf.control_dependencies(
-            [train_op1, train_op2, train_op3, train_op4]):
-            update_sc = self.source_moving_centroid.assign(source_centroid)
-            update_tc = self.target_moving_centroid.assign(target_centroid)
+            print '==============finetune_weights======================='
+            print finetune_weights
+            print '==============finetune_biases======================='
+            print finetune_biases
+            print '==============new_weights======================='
+            print new_weights
+            print '==============new_biases======================='
+            print new_biases
 
-        return tf.group(update_sc, update_tc)
+            self.F_loss = self.loss + self.Gregloss + global_step * self.G_loss + global_step * self.Semanticloss
+            train_op1 = tf.train.MomentumOptimizer(learning_rate * 0.1,
+                                                0.9).minimize(
+                                                    self.F_loss,
+                                                    var_list=finetune_weights)
+            train_op2 = tf.train.MomentumOptimizer(learning_rate * 0.2,
+                                                0.9).minimize(
+                                                    self.F_loss,
+                                                    var_list=finetune_biases)
+            train_op3 = tf.train.MomentumOptimizer(learning_rate * 1.0,
+                                                0.9).minimize(
+                                                    self.F_loss,
+                                                    var_list=new_weights)
+            train_op4 = tf.train.MomentumOptimizer(learning_rate * 2.0,
+                                                0.9).minimize(
+                                                    self.F_loss,
+                                                    var_list=new_biases)
+            train_op = tf.group(train_op1, train_op2, train_op3, train_op4)
+            with tf.control_dependencies(
+                [train_op1, train_op2, train_op3, train_op4]):
+                update_sc = self.source_moving_centroid.assign(source_centroid)
+                update_tc = self.target_moving_centroid.assign(target_centroid)
+
+            return tf.group(update_sc, update_tc)
 
     def load_original_weights(self, session, skip_layers=[]):
         weights_dict = np.load(
