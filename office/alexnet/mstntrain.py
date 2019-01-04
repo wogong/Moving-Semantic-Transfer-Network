@@ -22,8 +22,8 @@ tf.app.flags.DEFINE_string('train_root_dir', '/home/wogong/Models/tf-mstn/', 'Ro
 tf.app.flags.DEFINE_integer('log_step', 10000, 'Logging period in terms of iteration')
 
 NUM_CLASSES = 31
-TRAINING_FILE = '/home/wogong/Datasets/office/amazon_list.txt'
-VAL_FILE = '/home/wogong/Datasets/office/webcam_list.txt'
+TRAINING_FILE = '/home/wogong/Datasets/office/list/amazon_list.txt'
+VAL_FILE = '/home/wogong/Datasets/office/list/webcam_list.txt'
 FLAGS = tf.app.flags.FLAGS
 MAX_STEP = 10000
 MODEL_NAME = 'amazon_to_webcam'
@@ -99,7 +99,7 @@ def main(_):
     D_op = model.adoptimize(decay_learning_rate, train_layers)
     optimizer = tf.group(train_op, D_op)
 
-    train_writer = tf.summary.FileWriter('/home/wogong/Models/tf-mstn/log/tensorboard' + MODEL_NAME)
+    train_writer = tf.summary.FileWriter(os.path.join(tensorboard_dir, MODEL_NAME)
     train_writer.add_graph(tf.get_default_graph())
     tf.summary.scalar('Testing Accuracy', target_accuracy)
     merged = tf.summary.merge_all()
@@ -231,7 +231,7 @@ def main(_):
                     #train_preprocessor.reset_pointer()
 
                 if gd % 5000 == 0 and gd > 0:
-                    saver.save(sess, '/home/wogong/Models/tf-mstn/log/mstnmodel_' + MODEL_NAME + str(gd) + '.ckpt')
+                    saver.save(sess, checkpoint_dir + MODEL_NAME + str(gd) + '.ckpt')
                     print("{} Saving checkpoint of model...".format(datetime.datetime.now()))
 
 
